@@ -1,58 +1,64 @@
-project(EMPTY)
-
-set(ORG_BUILD_TESTING ${BUILD_TESTING})
-set(BUILD_TESTING OFF)
+project(ether_sniffer)
 
 cmake_minimum_required(VERSION 3.16)
-set(CMAKE_CXX_COMPILER /usr/bin/c++)
-set(CMAKE_CXX_FLAGS "-m64 -std=c++17")
+
+set(CMAKE_CXX_FLAGS "-m64 -std=c++14")
 add_compile_options(-W -Wall -g -fpermissive)
 
-include_directories(include)
+include(FetchContent)
 
-###############################
-# for hpp
-###############################
-#add_library(EMPTY INTERFACE)
-#target_sources(EMPTY INTERFACE EMPTY.hpp)
-#target_include_directories (EMPTY
-#INTERFACE
-#    ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-###############################
-# for cpp (.so)
-###############################
-#add_library(EMPTY SHARED EMPTY.cpp)
-#install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib)
-#target_include_directories (EMPTY
-#PUBLIC
-#    ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-###############################
-# for doxygen
-###############################
-option(BUILD_DOC "Build documentation" ON)
-find_package(Doxygen)
-if (DOXYGEN_FOUND)
-    set(DOXYGEN_OUT ${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile)
-    configure_file(${DOXYGEN_OUT} @ONLY)
-    add_custom_target(
-	EMPTY_doc_doxygen ALL
-        COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Generating API documentation with Doxygen"
-        VERBATIM )
-else (DOXYGEN_FOUND)
-    message("Doxygen need to be installed to generate the doxygen documentation")
-endif (DOXYGEN_FOUND)
+FetchContent_Declare(sensordb
+  GIT_REPOSITORY https://github.com/chicchicforkfork/SensorDB.git
+  GIT_TAG        master
+)
+FetchContent_Declare(lockedhash
+  GIT_REPOSITORY https://github.com/chicchicforkfork/LockedHash.git
+  GIT_TAG        master
+)
+FetchContent_Declare(json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG        v3.9.1
+)
+FetchContent_Declare(spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog
+  GIT_TAG        v1.9.2
+)
 
 
-###############################
-# for gtest
-###############################
-set(BUILD_TESTING ${ORG_BUILD_TESTING})
-if (BUILD_TESTING)
-    enable_testing()
-    add_subdirectory(test)
-endif()
+FetchContent_MakeAvailable(sensordb lockedhash json spdlog)
 
+
+##################################
+# ether_sniffer exe
+##################################
+add_executable(ether_sniffer
+  src/main.cpp
+)
+
+target_compile_options(ether_sniffer
+PRIVATE
+  -Wno-unused-function 
+  -Wno-unused-but-set-variable 
+  -Wno-unused-parameter
+  -Wno-unused-variable
+)
+target_include_directories(ether_sniffer
+PUBLIC
+  src
+  include
+  ${lockedhash_SOURCE_DIR}/include
+  ${json_SOURCE_DIR}/include
+  ${smartio_SOURCE_DIR}/include
+  ${spdlog_SOURCE_DIR}/include
+)
+target_link_libraries(ether_sniffer
+PUBLIC
+  spdlog
+  pthread
+  smartio
+)
+
+
+#add_subdirectory(examples)
+#add_subdirectory(tests)
+#add_subdirectory(http)
