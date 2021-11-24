@@ -59,6 +59,8 @@ public:
   EtherSniffer(const std::string &ifname);
   virtual ~EtherSniffer();
   void add_net_config(const net_v4_conf_t &conf);
+  LockedHash<const uint8_t *, NetClient, NetClientHash, NetClientMakeKey> *
+  net_clients();
 
 public:
   bool run();

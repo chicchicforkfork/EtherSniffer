@@ -102,8 +102,40 @@ const string EtherSniffer::name() { //
   return "ether_sniffer";
 }
 
-void EtherSniffer::run() { //
+LockedHash<const uint8_t *, NetClient, NetClientHash, NetClientMakeKey> *
+EtherSniffer::net_clients() {
+  return _net_clients;
+}
+
+bool EtherSniffer::run() {
   struct event_base *evbase;
   struct event *evlisten;
   int sniff_fd;
+
+  sniff_fd = create_sniff_socket(_ifname);
+  evbase = event_base_new();
+
+  evlisten = event_new(evbase,                       //
+                       sniff_fd,                     //
+                       EV_READ | EV_PERSIST,         //
+                       EtherSniffer::sniff_callback, //
+                       this);
+
+  event_add(evlisten, NULL);
+  event_base_dispatch(evbase);
+}
+
+void EtherSniffer::sniff_callback(int fd, short events, void *arg) {
+  (void)events;
+  auto sniffer = (EtherSniffer *)arg;
+  auto net_clients = sniffer->net_clients();
+  uint8_t payload[sizeof(struct arp)];
+  auto ether = (struct ethhdr *)payload;
+  auto arp = (struct arp *)payload;
+  size_t rbytes;
+
+  rbytes = recv(fd, &payload, sizeof(payload), 0);
+  if (rbytes <= 0) {
+    return;
+  }
 }
