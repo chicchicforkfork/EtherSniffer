@@ -17,15 +17,19 @@ typedef struct net_v4_conf {
 
 class NetClient {
 private:
-  uint32_t _client_ip;
-  uint8_t _mac[6];
+  uint32_t _ip;
+  uint8_t _mac[6] = {0};
   size_t _detected;
   time_t _last_seen;
 
 public:
+  NetClient() {}
   NetClient(const uint8_t *mac) { memcpy(_mac, mac, sizeof(_mac)); }
+  void mac(const uint8_t *mac) { memcpy(_mac, mac, sizeof(_mac)); }
+  void ip(uint32_t ip) { _ip = ip; }
+  void ip(const uint8_t *ip) { _ip = ntohl(*((uint32_t *)ip)); }
   const uint8_t *mac() const { return _mac; }
-  uint32_t client_ip() const { return _client_ip; }
+  uint32_t ip() const { return _ip; }
   size_t detected() const { return _detected; }
   time_t last_seen() const { return _last_seen; }
 };
@@ -49,7 +53,7 @@ private:
   std::unordered_map<uint32_t, uint8_t *> _ip_mac_map;
   std::string _ifname;
   LockedHash<const uint8_t *, NetClient, NetClientHash, NetClientMakeKey>
-      *_net_clients;
+      *_net_client_hash;
 
 private:
   static void sniff_callback(int fd, short events, void *arg);
@@ -60,7 +64,7 @@ public:
   virtual ~EtherSniffer();
   void add_net_config(const net_v4_conf_t &conf);
   LockedHash<const uint8_t *, NetClient, NetClientHash, NetClientMakeKey> *
-  net_clients();
+  net_client_hash();
 
 public:
   bool run();

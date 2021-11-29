@@ -12,21 +12,23 @@
 #include <linux/if_packet.h>
 #include <linux/types.h>
 #include <linux/wireless.h>
+#include <netutil.hpp>
 #include <stdint.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 using namespace std;
 
 EtherSniffer::EtherSniffer(const std::string &ifname) {
   _ifname = ifname;
-  _net_clients = new LockedHash<const uint8_t *, NetClient, NetClientHash,
-                                NetClientMakeKey>(4096, 60 * 2);
+  _net_client_hash = new LockedHash<const uint8_t *, NetClient, NetClientHash,
+                                    NetClientMakeKey>(4096, 60 * 2);
 }
 
 EtherSniffer::~EtherSniffer() { //
-  delete _net_clients;
+  delete _net_client_hash;
 }
 
 int EtherSniffer::create_sniff_socket(const std::string &ifname) {
@@ -45,7 +47,9 @@ int EtherSniffer::create_sniff_socket(const std::string &ifname) {
   }
 
   // nonblock
-  { evutil_make_socket_nonblocking(sockfd); }
+  { //
+    evutil_make_socket_nonblocking(sockfd);
+  }
 
   // promisc
   {
@@ -103,8 +107,8 @@ const string EtherSniffer::name() { //
 }
 
 LockedHash<const uint8_t *, NetClient, NetClientHash, NetClientMakeKey> *
-EtherSniffer::net_clients() {
-  return _net_clients;
+EtherSniffer::net_client_hash() {
+  return _net_client_hash;
 }
 
 bool EtherSniffer::run() {
@@ -128,14 +132,48 @@ bool EtherSniffer::run() {
 void EtherSniffer::sniff_callback(int fd, short events, void *arg) {
   (void)events;
   auto sniffer = (EtherSniffer *)arg;
-  auto net_clients = sniffer->net_clients();
-  uint8_t payload[sizeof(struct arp)];
-  auto ether = (struct ethhdr *)payload;
-  auto arp = (struct arp *)payload;
+  auto net_client_hash = sniffer->net_client_hash();
+  uint8_t payload[sizeof(NetUtil::arp_t)] = {0};
+  auto ether = (NetUtil::ethhdr_t *)payload;
   size_t rbytes;
+  NetClient net_client;
 
   rbytes = recv(fd, &payload, sizeof(payload), 0);
-  if (rbytes <= 0) {
+  if ((rbytes <= 0) || (rbytes < sizeof(NetUtil::ethhdr_t))) {
+    return;
+  }
+  if (NetUtil::mac::multicast(ether->h_source) || //
+      NetUtil::mac::null(ether->h_source)) {
+    return;
+  }
+
+  switch (ntohs(ether->h_proto)) {
+  case ETH_P_8021Q:
+    break;
+  case ETH_P_ARP: //
+  {
+    auto arp = (NetUtil::arp_t *)payload;
+    switch (ntohs(arp->operation)) {
+    case ARPOP_REPLY:
+    case ARPOP_REQUEST:
+      net_client.mac(arp->sHaddr);
+      net_client.ip(arp->sInaddr);
+      if (NetUtil::ip::null(net_client.ip()) || //
+          NetUtil::ip::broadcast(net_client.ip())) {
+        return;
+      }
+      if (NetUtil::arp::gratuitous(arp)) {
+        //
+      }
+      break;
+    default:
+      return;
+    }
+    break;
+  }
+  case ETH_P_IP:
+    break;
+  default:
     return;
   }
 }
